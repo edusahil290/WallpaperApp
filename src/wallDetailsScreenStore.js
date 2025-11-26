@@ -8,8 +8,9 @@ const PER_PAGE = 10;
 const getImageFromPexelsApi = (query = "cartoon", pageNumber = 1) => {
 
     //https://api.pexels.com/v1/search?query=Nature&page=1&per_page=5
-
-    return fetch(`${BASE_URL}search?query=${query}&page=${pageNumber}&per_page=${PER_PAGE}`, {
+    let url = `${BASE_URL}search?query=${query}&page=${pageNumber}&per_page=${PER_PAGE}`
+    console.log("Fetching images from Pexels API with URL:", url);
+    return fetch(url, {
         method: 'GET',
         headers: {
             'Authorization': API_KEY
@@ -36,6 +37,10 @@ const getImageFromPexelsApi = (query = "cartoon", pageNumber = 1) => {
             }else{
                 throw new Error("Data is not fount through Rest API");
             }
+        })
+        .catch(error => {
+            console.error("Error fetching images from Pexels API:", error);
+            throw error;
         })
         ;
 }
