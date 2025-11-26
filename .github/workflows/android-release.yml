@@ -42,6 +42,10 @@ jobs:
             ~/.gradle/wrapper
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle', '**/*.gradle.kts', '**/gradle-wrapper.properties') }}
 
+      - name: Give Gradlew Permission
+        working-directory: android
+        run: chmod +x gradlew
+
       - name: Build Release APK
         working-directory: android
         run: |
