@@ -1,71 +1,89 @@
-name: Android Release APK
+name: Build Release APK
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - main
-      - master
 
 jobs:
-  build-android:
+  build:
+    name: Build Android Release APK
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout repo
-      - name: Checkout Repository
+      # Checkout the repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Setup Node.js
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      # 3️⃣ Install JS dependencies
-      - name: Install Dependencies
-        run: |
-          npm install
-
-      # 4️⃣ Setup Java
-      - name: Setup Java
+      # Set up JDK 17 (required for React Native)
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      # 5️⃣ Decode keystore from secret (using your actual keystore name)
-      - name: Prepare Keystore File
-        run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/my-upload-key.keystore
-
-      # 6️⃣ Setup Gradle cache
-      - name: Setup Gradle Cache
-        uses: actions/cache@v4
+      # Set up Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle', '**/*.gradle.kts', '**/gradle-wrapper.properties') }}
+          node-version: '22'
+          cache: 'npm'
 
-      # 7️⃣ Give Gradlew execute permission
-      - name: Give Gradlew Permission
-        working-directory: android
-        run: chmod +x gradlew
+      # Install npm dependencies
+      - name: Install dependencies
+        run: npm ci
 
-      # 8️⃣ Build signed Release APK (override local gradle.properties)
-      - name: Build Release APK
-        working-directory: android
+      # Cache Gradle dependencies
+      - name: Cache Gradle Wrapper
+        uses: actions/cache@v3
+        with:
+          path: ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-wrapper-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties') }}
+
+      - name: Cache Gradle Dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-caches-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-caches-
+
+      # Decode and setup keystore from GitHub Secrets
+      - name: Decode Keystore
         run: |
-          ./gradlew assembleRelease \
-            -Pandroid.injected.signing.store.file=my-upload-key.keystore \
-            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
-            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
-            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/my-upload-key.keystore
 
-      # 9️⃣ Upload APK as artifact
+      # Make gradlew executable
+      - name: Make Gradlew executable
+        run: chmod +x android/gradlew
+
+      # Build the release APK
+      - name: Build Release APK
+        run: |
+          cd android
+          ./gradlew assembleRelease --no-daemon --stacktrace
+        env:
+          MYAPP_UPLOAD_STORE_FILE: my-upload-key.keystore
+          MYAPP_UPLOAD_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          MYAPP_UPLOAD_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          MYAPP_UPLOAD_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+      # Upload the APK as an artifact
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-release-apk
+          name: app-release-${{ github.run_number }}
           path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
+
+      # Optional: Create a release
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Release v1.0.${{ github.run_number }}
+          files: android/app/build/outputs/apk/release/app-release.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
